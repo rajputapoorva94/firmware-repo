@@ -4,11 +4,6 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Tag name (for manual run, default is v1.0.0)'
-        required: false
-        default: 'v1.0.0'
 
 jobs:
   update-metadata:
@@ -19,17 +14,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set tag name
-        id: set_tag
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "TAG_NAME=${{ github.event.release.tag_name }}" >> "$GITHUB_ENV"
-          else
-            TAG_NAME="${{ github.event.inputs.tag_name }}"
-            if [ -z "$TAG_NAME" ]; then
-              TAG_NAME="v1.0.0"
-            fi
-            echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
-          fi
+        run: echo "TAG_NAME=v1.0.0" >> $GITHUB_ENV
 
       - name: Get release info
         id: release
@@ -38,13 +23,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: string
           script: |
-            const tag = process.env.TAG_NAME;
             const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: tag
+              tag: process.env.TAG_NAME
             });
-            return JSON.stringify(release.data);
+            core.setOutput('result', JSON.stringify(release.data));
         env:
           TAG_NAME: ${{ env.TAG_NAME }}
 
@@ -53,7 +37,7 @@ jobs:
         run: |
           echo '${{ steps.release.outputs.result }}' > release.json
           echo "{" > firmware.json
-          echo "  \"version\": \"${{ env.TAG_NAME }}\"," >> firmware.json
+          echo "  \"version\": \"$TAG_NAME\"," >> firmware.json
           echo "  \"firmwares\": {" >> firmware.json
           ASSETS=$(jq -r '.assets[] | "\(.name)|\(.browser_download_url)"' release.json)
           COUNT=$(echo "$ASSETS" | wc -l)
@@ -77,7 +61,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: rajputapoorva94/firmware-meta
-          token: ${{ secrets.PERSONAL_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: meta
 
       - name: Copy and Commit firmware.json
@@ -87,5 +71,5 @@ jobs:
           git config user.name "GitHub Action"
           git config user.email "actions@github.com"
           git add firmware.json
-          git commit -m "Update firmware metadata for ${{ env.TAG_NAME }}" || echo "No changes to commit"
+          git commit -m "Update firmware metadata for $TAG_NAME" || echo "No changes to commit"
           git push
