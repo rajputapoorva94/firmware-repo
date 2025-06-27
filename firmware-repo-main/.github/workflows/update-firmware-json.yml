@@ -24,8 +24,11 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "TAG_NAME=${{ github.event.release.tag_name }}" >> "$GITHUB_ENV"
           else
-            # Use workflow input or default to v1.0.0
-            echo "TAG_NAME=${{ github.event.inputs.tag_name || 'v1.0.0' }}" >> "$GITHUB_ENV"
+            TAG_NAME="${{ github.event.inputs.tag_name }}"
+            if [ -z "$TAG_NAME" ]; then
+              TAG_NAME="v1.0.0"
+            fi
+            echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
           fi
 
       - name: Get release info
@@ -35,13 +38,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           result-encoding: string
           script: |
-            const tag = process.env.TAG_NAME || '${{ env.TAG_NAME }}' || 'v1.0.0';
+            const tag = process.env.TAG_NAME;
             const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag: tag
             });
             return JSON.stringify(release.data);
+        env:
+          TAG_NAME: ${{ env.TAG_NAME }}
 
       - name: Generate firmware.json
         id: generate
@@ -82,5 +87,5 @@ jobs:
           git config user.name "GitHub Action"
           git config user.email "actions@github.com"
           git add firmware.json
-          git commit -m "Update firmware metadata for ${{ env.TAG_NAME }}"
+          git commit -m "Update firmware metadata for ${{ env.TAG_NAME }}" || echo "No changes to commit"
           git push
